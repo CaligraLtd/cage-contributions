@@ -244,19 +244,8 @@ handle_xdg_toplevel_map(struct wl_listener *listener, void *data)
 }
 
 static void
-handle_xdg_toplevel_commit(struct wl_listener *listener, void *data)
+handle_xdg_toplevel_initial_commit(struct cg_xdg_shell_view *xdg_shell_view)
 {
-	struct cg_xdg_shell_view *xdg_shell_view = wl_container_of(listener, xdg_shell_view, commit);
-
-	if (xdg_shell_view->xdg_toplevel->base->surface->mapped) {
-		wlr_foreign_toplevel_handle_v1_set_fullscreen(xdg_shell_view->view.foreign_toplevel_handle,
-							      xdg_shell_view->xdg_toplevel->current.fullscreen);
-	}
-
-	if (!xdg_shell_view->xdg_toplevel->base->initial_commit) {
-		return;
-	}
-
 	/* When an xdg_surface performs an initial commit, the compositor must
 	 * reply with a configure so the client can map the surface. */
 	wlr_xdg_surface_schedule_configure(xdg_shell_view->xdg_toplevel->base);
@@ -266,6 +255,21 @@ handle_xdg_toplevel_commit(struct wl_listener *listener, void *data)
 		set_fullscreen(xdg_shell_view, true);
 	} else {
 		view_position(&xdg_shell_view->view);
+	}
+}
+
+static void
+handle_xdg_toplevel_commit(struct wl_listener *listener, void *data)
+{
+	struct cg_xdg_shell_view *xdg_shell_view = wl_container_of(listener, xdg_shell_view, commit);
+
+	if (xdg_shell_view->xdg_toplevel->base->surface->mapped) {
+		wlr_foreign_toplevel_handle_v1_set_fullscreen(xdg_shell_view->view.foreign_toplevel_handle,
+							      xdg_shell_view->xdg_toplevel->current.fullscreen);
+	}
+
+	if (xdg_shell_view->xdg_toplevel->base->initial_commit) {
+		handle_xdg_toplevel_initial_commit(xdg_shell_view);
 	}
 }
 
