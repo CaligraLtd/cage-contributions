@@ -257,13 +257,14 @@ handle_xdg_toplevel_commit(struct wl_listener *listener, void *data)
 		return;
 	}
 
+	/* When an xdg_surface performs an initial commit, the compositor must
+	 * reply with a configure so the client can map the surface. */
+	wlr_xdg_surface_schedule_configure(xdg_shell_view->xdg_toplevel->base);
 	wlr_xdg_toplevel_set_wm_capabilities(xdg_shell_view->xdg_toplevel, XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
 
 	if (xdg_shell_view->xdg_toplevel->requested.fullscreen) {
 		set_fullscreen(xdg_shell_view, true);
 	} else {
-		/* When an xdg_surface performs an initial commit, the compositor must
-		 * reply with a configure so the client can map the surface. */
 		view_position(&xdg_shell_view->view);
 	}
 }
