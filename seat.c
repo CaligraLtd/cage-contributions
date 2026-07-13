@@ -19,6 +19,7 @@
 #include <wlr/backend/multi.h>
 #include <wlr/backend/session.h>
 #include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_keyboard_group.h>
@@ -29,6 +30,7 @@
 #include <wlr/types/wlr_touch.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
+#include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/util/log.h>
 #if CAGE_HAS_XWAYLAND
 #include <wlr/xwayland.h>
@@ -497,6 +499,33 @@ handle_request_set_cursor(struct wl_listener *listener, void *data)
 }
 
 static void
+handle_request_set_shape(struct wl_listener *listener, void *data)
+{
+	struct cg_seat *seat = wl_container_of(listener, seat, request_set_shape);
+	struct wlr_cursor_shape_manager_v1_request_set_shape_event *event = data;
+	struct wlr_surface *focused_surface = event->seat_client->seat->pointer_state.focused_surface;
+	bool has_focused = focused_surface != NULL && focused_surface->resource != NULL;
+	struct wl_client *focused_client = NULL;
+	if (has_focused) {
+		focused_client = wl_resource_get_client(focused_surface->resource);
+	}
+
+	/* This can be sent by any client, so we check to make sure
+	 * this one actually has pointer focus first. */
+	if (focused_client == event->seat_client->client) {
+		const char *shape_name = wlr_cursor_shape_v1_name(event->shape);
+		/* set_xcursor keeps the old image if the theme lacks this shape, so
+		 * fall back to the default. Scale 1 is a fine existence check; a theme
+		 * has the same cursors at every scale. */
+		wlr_xcursor_manager_load(seat->server->xcursor_manager, 1);
+		if (!wlr_xcursor_manager_get_xcursor(seat->server->xcursor_manager, shape_name, 1)) {
+			shape_name = DEFAULT_XCURSOR;
+		}
+		wlr_cursor_set_xcursor(seat->cursor, seat->server->xcursor_manager, shape_name);
+	}
+}
+
+static void
 handle_touch_down(struct wl_listener *listener, void *data)
 {
 	struct cg_seat *seat = wl_container_of(listener, seat, touch_down);
@@ -781,6 +810,7 @@ handle_destroy(struct wl_listener *listener, void *data)
 	wl_list_remove(&seat->touch_motion.link);
 	wl_list_remove(&seat->touch_frame.link);
 	wl_list_remove(&seat->request_set_cursor.link);
+	wl_list_remove(&seat->request_set_shape.link);
 	wl_list_remove(&seat->request_set_selection.link);
 	wl_list_remove(&seat->request_set_primary_selection.link);
 
@@ -855,6 +885,19 @@ seat_create(struct cg_server *server, struct wlr_backend *backend)
 
 	seat->request_set_cursor.notify = handle_request_set_cursor;
 	wl_signal_add(&seat->seat->events.request_set_cursor, &seat->request_set_cursor);
+
+	/* Pre-init the listener link so handle_destroy stays safe if the
+	 * manager fails to create. */
+	wl_list_init(&seat->request_set_shape.link);
+	struct wlr_cursor_shape_manager_v1 *cursor_shape_manager =
+		wlr_cursor_shape_manager_v1_create(server->wl_display, 1);
+	if (cursor_shape_manager) {
+		seat->request_set_shape.notify = handle_request_set_shape;
+		wl_signal_add(&cursor_shape_manager->events.request_set_shape, &seat->request_set_shape);
+	} else {
+		wlr_log(WLR_ERROR, "Cannot create cursor shape manager");
+	}
+
 	seat->request_set_selection.notify = handle_request_set_selection;
 	wl_signal_add(&seat->seat->events.request_set_selection, &seat->request_set_selection);
 	seat->request_set_primary_selection.notify = handle_request_set_primary_selection;
