@@ -91,4 +91,5 @@ struct cg_view *seat_get_focus(struct cg_seat *seat);
 void seat_set_focus(struct cg_seat *seat, struct cg_view *view);
 void seat_center_cursor(struct cg_seat *seat);
 
+void handle_request_set_shape(struct wl_listener *listener, void *data);
 #endif
